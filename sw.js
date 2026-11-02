@@ -1,6 +1,6 @@
 // Сервис-воркер: хранит файлы приложения на устройстве, чтобы оно работало без интернета.
 // При выпуске новой версии меняй VERSION — устройства скачают обновление при следующем запуске.
-const VERSION = 'podhod-1.0.0';
+const VERSION = 'podhod-1.1.0';
 const FILES = [
   './',
   'css/app.css',
@@ -16,11 +16,13 @@ const FILES = [
   'js/app.js',
   'js/calc.js',
   'js/charts.js',
+  'js/exchange.js',
   'js/icons.js',
   'js/store.js',
   'js/sync.js',
   'js/timer.js',
   'js/ui.js',
+  'js/views/exchange.js',
   'js/views/food.js',
   'js/views/habits.js',
   'js/views/settings.js',
