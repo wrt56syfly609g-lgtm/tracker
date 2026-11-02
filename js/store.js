@@ -22,7 +22,7 @@ export const kvDel = k => tx('readwrite', s => s.delete(k));
 
 export const COLS = ['habits', 'hlog', 'food', 'days', 'ex', 'tpl', 'wo'];
 export const OBJS = ['profile', 'settings'];
-export const MUSCLES = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Кор'];
+export const MUSCLES = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Предплечья', 'Кор'];
 
 export let S = null;   // текущее состояние
 export let rev = 0;    // номер версии в памяти (для кэша расчётов)

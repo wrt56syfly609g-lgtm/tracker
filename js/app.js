@@ -11,6 +11,8 @@ import * as foodV from './views/food.js';
 import * as workoutV from './views/workout.js';
 import * as statsV from './views/stats.js';
 import * as settingsV from './views/settings.js';
+import { importSheet } from './views/exchange.js';
+import { fromLink } from './exchange.js';
 
 const ROUTES = {
   today: { v: todayV, t: 'Сегодня', ic: 'home', dated: true },
@@ -90,6 +92,11 @@ function route() {
     settingsV.setJoinCode(hsh.slice(5));
     history.replaceState(null, '', location.pathname + '#settings');
     ctx.route = 'settings';
+  } else if (hsh.startsWith('import=')) {
+    // Ссылка с программой или упражнениями: данные в самой ссылке, на сервер не уходят.
+    history.replaceState(null, '', location.pathname + '#workout');
+    ctx.route = 'workout';
+    fromLink(hsh.slice(7)).then(t => importSheet(t)).catch(() => toast('Ссылка для импорта повреждена. Скопируй её целиком.'));
   } else ctx.route = ROUTES[hsh] ? hsh : 'today';
   window.scrollTo(0, 0);
   render();

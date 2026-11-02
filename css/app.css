@@ -294,3 +294,13 @@ body.resting .main-wrap { padding-bottom: calc(var(--tab-h) + env(safe-area-inse
 .qr svg { width: 100%; height: auto; display: block; }
 .code-box { font-family: ui-monospace, Consolas, monospace; font-size: 11px; word-break: break-all; background: var(--bg); padding: 10px; border-radius: 10px; max-height: 90px; overflow: auto; user-select: all; }
 video.scan { width: 100%; border-radius: 12px; background: #000; aspect-ratio: 1; object-fit: cover; }
+
+/* Обмен упражнениями */
+.inp.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.45; }
+.inp.sm { min-height: 34px; padding: 6px 10px; font-size: 13px; margin-top: 6px; border-radius: 10px; }
+.tag.goal { white-space: normal; text-align: left; }
+details.more { border-top: 1px solid var(--line); padding-top: 10px; }
+details.more > summary { cursor: pointer; font-weight: 500; color: var(--accent); list-style-position: inside; }
+.code-ex { margin: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 10px; border-radius: 10px; }
+ul.rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+ul.rules li { overflow-wrap: anywhere; }

@@ -6,6 +6,7 @@ import {
   lastSession, bestBefore, setsText, fatigueWarning, currentWeight, energy,
 } from '../calc.js';
 import { startRest, stopRest, unlockAudio } from '../timer.js';
+import { exportSheet, importSheet } from './exchange.js';
 
 let viewWo = null; // id прошлой тренировки, открытой для просмотра/правки
 
@@ -25,7 +26,7 @@ function prefill(exId, count = 3) {
 function startWorkout(tplId) {
   unlockAudio();
   const tpl = tplId && get('tpl', tplId);
-  const items = (tpl?.items || []).filter(i => get('ex', i.ex)).map(i => ({ ex: i.ex, tech: null, note: '', sets: prefill(i.ex, i.sets || 3) }));
+  const items = (tpl?.items || []).filter(i => get('ex', i.ex)).map(i => ({ ex: i.ex, goal: i.goal ? `${i.sets || 3}×${i.goal}` : null, tech: null, note: '', sets: prefill(i.ex, i.sets || 3) }));
   save({ date: today(), start: Date.now(), end: null, active: true, tpl: tplId || null, name: tpl?.name || 'Свободная тренировка', items, srpe: null, kcal: null, note: '' });
 }
 
@@ -64,7 +65,11 @@ function home(ctx) {
 
   out.push(card('Упражнения', 'stretching',
     h('div', { class: 'muted small' }, `В библиотеке ${all('ex').length}. Можно добавить свои, задать отдых и шаг веса для каждого.`),
-    btn('Открыть библиотеку', () => library(), '', 'list-check')));
+    btn('Открыть библиотеку', () => library(), '', 'list-check'),
+    h('div', { class: 'muted small' }, 'Программы и пачки упражнений можно отправить текстом, файлом или ссылкой и загрузить обратно.'),
+    h('div', { class: 'grid2' },
+      btn('Экспорт', () => exportSheet(), '', 'share'),
+      btn('Импорт', () => importSheet(), '', 'download'))));
   return h('div', { class: 'stack', style: 'gap:14px' }, out);
 }
 
@@ -114,6 +119,7 @@ function exCard(w, it, idx) {
     h('div', { class: 'grow' }, h('h2', null, exName(exId)),
       h('div', { class: 'row', style: 'gap:6px;margin-top:4px;flex-wrap:wrap' },
         h('span', { class: 'tag' }, S.ex[exId]?.muscle || '—'),
+        it.goal ? h('span', { class: 'tag acc goal', title: 'Цель из шаблона' }, icon('target', 'sm'), it.goal) : null,
         h('button', { type: 'button', class: 'tag', style: 'border:0', onclick: () => editExercise(S.ex[exId]) }, icon('clock', 'sm'), 'отдых ' + fmtRest(restOf(exId))))),
     idx > 0 ? ibtn('chevron-down', () => { [w.items[idx - 1], w.items[idx]] = [w.items[idx], w.items[idx - 1]]; save(w); }, 'Поднять выше', { style: 'transform:rotate(180deg)' }) : null,
     ibtn('trash', () => { const copy = JSON.parse(JSON.stringify(it)); w.items.splice(idx, 1); save(w); toast(`${exName(exId)} убрано`, 'Вернуть', () => { w.items.splice(idx, 0, copy); save(w); }); }, 'Убрать упражнение'));
@@ -220,6 +226,13 @@ function editExercise(src, onSaved) {
   });
 }
 
+// Цель по повторам в шаблоне: «8–12», «6–10/р», «20–30 с». Показывается во время тренировки.
+function goalInput(it) {
+  const el = input({ value: it.goal || '', placeholder: 'повторы, напр. 8–12', class: 'inp sm', 'aria-label': 'Цель по повторам', maxlength: 80 });
+  el.addEventListener('input', () => { const v = el.value.trim(); if (v) it.goal = v; else delete it.goal; });
+  return el;
+}
+
 function editTemplate(src) {
   const x = JSON.parse(JSON.stringify(src)), isNew = !x.id;
   sheet(isNew ? 'Новый шаблон' : 'Шаблон', close => {
@@ -230,10 +243,11 @@ function editTemplate(src) {
       body.replaceChildren(
         field('Название', name),
         x.items.length ? h('div', { class: 'list' }, x.items.map((it, i) => h('div', { class: 'item' },
-          h('div', { class: 't' }, h('b', null, exName(it.ex)), h('span', null, S.ex[it.ex]?.muscle || '')),
+          h('div', { class: 't' }, h('b', null, exName(it.ex)), h('span', null, S.ex[it.ex]?.muscle || ''), goalInput(it)),
           h('div', { style: 'width:120px' }, stepper({ value: it.sets, step: 1, min: 1, max: 12, sm: true, label: 'Подходов', onChange: v => { it.sets = v || 1; draw(); } })),
           ibtn('trash', () => { x.items.splice(i, 1); draw(); }, 'Убрать')))) : h('div', { class: 'empty' }, 'Добавь упражнения в шаблон.'),
         btn('Добавить упражнение', () => browser('Добавить в шаблон', (e, c) => { c(); x.items.push({ ex: e.id, sets: 3 }); draw(); }, false), 'soft', 'plus'),
+        !isNew && btn('Экспорт шаблона', () => { close(); exportSheet({ tplIds: [x.id] }); }, 'ghost sm', 'share'),
         h('div', { class: 'grid2' },
           isNew ? btn('Отмена', close) : btn('Удалить', () => { close(); const undo = remove('tpl', x.id); toast('Шаблон удалён', 'Вернуть', undo); }, 'danger', 'trash'),
           btn('Сохранить', () => {
