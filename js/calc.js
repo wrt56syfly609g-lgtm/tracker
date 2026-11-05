@@ -52,8 +52,8 @@ export function idx() {
 export const foodOn = d => (idx().food[d] || []).slice().sort((a, b) => (a.t || '').localeCompare(b.t || ''));
 export const workoutsOn = d => idx().wo[d] || [];
 export function totals(d) {
-  const t = { kcal: 0, p: 0, f: 0, c: 0, n: 0 };
-  for (const x of idx().food[d] || []) { t.kcal += +x.kcal || 0; t.p += +x.p || 0; t.f += +x.f || 0; t.c += +x.c || 0; t.n++; }
+  const t = { kcal: 0, p: 0, f: 0, c: 0, fb: 0, n: 0 };
+  for (const x of idx().food[d] || []) { t.kcal += +x.kcal || 0; t.p += +x.p || 0; t.f += +x.f || 0; t.c += +x.c || 0; t.fb += +x.fb || 0; t.n++; }
   return t;
 }
 
@@ -106,14 +106,16 @@ export function targetsAuto(d = today()) {
   const e = energy(d), p = S.profile, w = p.autoWeight ? e.w : p.weight;
   const kcal = Math.round(e.passive * (GOALS[p.goal]?.k || 1) / 10) * 10;
   const pr = Math.round(1.8 * w), f = Math.round(0.9 * w);
-  return { kcal, p: pr, f, c: Math.max(0, Math.round((kcal - pr * 4 - f * 9) / 4)) };
+  return { kcal, p: pr, f, c: Math.max(0, Math.round((kcal - pr * 4 - f * 9) / 4)), fb: fiberFor(kcal) };
 }
+// Клетчатка: 14 г на каждые 1000 ккал, но не меньше 25 г в день (рекомендации ВОЗ и Минздрава — 25–30 г).
+export const fiberFor = kcal => Math.max(25, Math.round(kcal * 14 / 1000));
 export function targets(d = today()) {
   const a = targetsAuto(d), p = S.profile;
   const kcal = p.kcalOverride ?? a.kcal, pr = p.pOverride ?? a.p, f = p.fOverride ?? a.f;
   const c = p.cOverride ?? (p.kcalOverride != null || p.pOverride != null || p.fOverride != null
     ? Math.max(0, Math.round((kcal - pr * 4 - f * 9) / 4)) : a.c);
-  return { kcal, p: pr, f, c };
+  return { kcal, p: pr, f, c, fb: p.fbOverride ?? fiberFor(kcal) };
 }
 
 /* ---------- привычки ---------- */

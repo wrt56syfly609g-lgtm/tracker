@@ -1,10 +1,10 @@
 // Настройки: профиль и расход, цели КБЖУ, тренировки, тема, синхронизация, резервная копия.
 import { S, setObj, merge, replace } from '../store.js';
 import { h, icon, btn, chips, stepper, sw, field, input, toast, card, stat, sheet, confirmSheet } from '../ui.js';
-import { num, today, bmr, passiveFor, targetsAuto, targets, currentWeight, currentBf, GOALS, fmtDate } from '../calc.js';
+import { num, today, bmr, passiveFor, targetsAuto, targets, currentWeight, currentBf, GOALS, fmtDate, fiberFor } from '../calc.js';
 import * as sync from '../sync.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 const F = { tk: '', repo: '', pass: '', pass2: '', needConfirm: false, code: '', jpass: '', busy: false, err: '' };
 export function setJoinCode(c) { F.code = c; }
 
@@ -39,9 +39,10 @@ export function render(ctx) {
   out.push(card('Цель и КБЖУ', 'target',
     field('Цель', chips({ allowNone: false, value: p.goal, opts: Object.entries(GOALS).map(([v, g]) => ({ v, l: g.l })), onChange: v => setObj('profile', { goal: v }) })),
     h('div', { class: 'grid4' }, macro('Ккал', 'kcal', 'kcalOverride'), macro('Белки, г', 'p', 'pOverride'), macro('Жиры, г', 'f', 'fOverride'), macro('Углев., г', 'c', 'cOverride')),
-    h('div', { class: 'hint' }, `Сейчас цель: ${num(tg.kcal)} ккал, Б ${num(tg.p)} · Ж ${num(tg.f)} · У ${num(tg.c)}. Пустые поля считаются сами: белок 1,8 г/кг, жиры 0,9 г/кг, остальное углеводы.`),
-    (p.kcalOverride ?? p.pOverride ?? p.fOverride ?? p.cOverride) != null
-      ? btn('Сбросить на авто', () => setObj('profile', { kcalOverride: null, pOverride: null, fOverride: null, cOverride: null }), 'ghost sm') : null));
+    field('Клетчатка, г', stepper({ value: p.fbOverride, step: 1, min: 0, max: 150, placeholder: num(fiberFor(tg.kcal)), sm: true, onChange: v => setObj('profile', { fbOverride: v }) })),
+    h('div', { class: 'hint' }, `Сейчас цель: ${num(tg.kcal)} ккал, Б ${num(tg.p)} · Ж ${num(tg.f)} · У ${num(tg.c)} · клетчатка ${num(tg.fb)} г. Пустые поля считаются сами: белок 1,8 г/кг, жиры 0,9 г/кг, остальное углеводы, клетчатка 14 г на 1000 ккал (не меньше 25 г).`),
+    (p.kcalOverride ?? p.pOverride ?? p.fOverride ?? p.cOverride ?? p.fbOverride) != null
+      ? btn('Сбросить на авто', () => setObj('profile', { kcalOverride: null, pOverride: null, fOverride: null, cOverride: null, fbOverride: null }), 'ghost sm') : null));
 
   out.push(card('Тренировки', 'barbell',
     h('div', { class: 'grid2' },

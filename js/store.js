@@ -20,7 +20,7 @@ export const kvGet = k => tx('readonly', s => s.get(k));
 export const kvSet = (k, v) => tx('readwrite', s => s.put(v, k));
 export const kvDel = k => tx('readwrite', s => s.delete(k));
 
-export const COLS = ['habits', 'hlog', 'food', 'days', 'ex', 'tpl', 'wo'];
+export const COLS = ['habits', 'hlog', 'food', 'days', 'ex', 'tpl', 'wo', 'prod'];
 export const OBJS = ['profile', 'settings'];
 export const MUSCLES = ['Грудь', 'Спина', 'Ноги', 'Плечи', 'Руки', 'Предплечья', 'Кор'];
 
@@ -96,7 +96,7 @@ function defaults() {
     profile: {
       u: 0, height: 170, weight: 75.5, bodyFat: 21, weightDate: todayIso(), autoWeight: true,
       activity: 1.2, passiveOverride: null, goal: 'maintain',
-      kcalOverride: null, pOverride: null, fOverride: null, cOverride: null, met: 5,
+      kcalOverride: null, pOverride: null, fOverride: null, cOverride: null, fbOverride: null, met: 5,
     },
     settings: { u: 0, rest: 120, sound: true, vibrate: true, wakeLock: true, step: 2.5, theme: 'auto' },
   };

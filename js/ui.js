@@ -82,7 +82,8 @@ export function input(props) {
 // Нижний лист (модальное окно). Возвращает функцию закрытия.
 export function sheet(title, body, { onClose } = {}) {
   const close = () => { bg.remove(); document.removeEventListener('keydown', esc); onClose && onClose(); };
-  const esc = e => { if (e.key === 'Escape') close(); };
+  // Esc закрывает только верхний лист, если открыто несколько.
+  const esc = e => { if (e.key === 'Escape' && [...document.querySelectorAll('.sheet-bg')].pop() === bg) close(); };
   const bg = h('div', { class: 'sheet-bg', onclick: e => { if (e.target === bg) close(); } },
     h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'grab' }),
