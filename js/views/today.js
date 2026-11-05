@@ -32,6 +32,7 @@ export function render(ctx) {
         h('div', { class: 'row between small' }, h('span', { class: 'muted' }, 'Баланс'),
           h('b', { class: 'num' }, signed(Math.round(e.bal)) + ' ккал')))),
     macroRow('Белки', 'c-p', t.p, tg.p), macroRow('Жиры', 'c-f', t.f, tg.f), macroRow('Углеводы', 'c-c', t.c, tg.c),
+    macroRow('Клетчатка', 'c-fb', t.fb, tg.fb),
     btn('Добавить еду', () => ctx.go('food'), 'soft block', 'plus')));
 
   // Рутина

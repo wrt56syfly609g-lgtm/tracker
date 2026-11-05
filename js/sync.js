@@ -1,7 +1,7 @@
 // Синхронизация через приватный репозиторий GitHub.
 // Данные сжимаются и шифруются на устройстве (AES-256-GCM, ключ из пароля через PBKDF2).
 // В репозитории лежит только зашифрованный файл data.enc. Пароль никуда не отправляется.
-import { S, merge, same, replace, kvGet, kvSet, kvDel, setSyncHook } from './store.js';
+import { S, COLS, merge, same, replace, kvGet, kvSet, kvDel, setSyncHook } from './store.js';
 
 const API = 'https://api.github.com', FILE = 'data.enc', ITER = 310000;
 export const st = { on: false, state: 'off', msg: '', last: null, repo: '' };
@@ -169,7 +169,7 @@ export async function restore(sha) {
   if (!ex) throw new Error('Версия не найдена.');
   const old = await decryptFile(key, ex.f), ts = Date.now();
   for (const k of ['profile', 'settings']) if (old[k]) old[k].u = ts;
-  for (const c of ['habits', 'hlog', 'food', 'days', 'ex', 'tpl', 'wo']) {
+  for (const c of COLS) {
     old[c] ||= {};
     for (const r of Object.values(old[c])) r.u = ts;
     for (const [id, r] of Object.entries(S[c] || {})) if (!old[c][id]) old[c][id] = { ...r, deleted: true, u: ts };

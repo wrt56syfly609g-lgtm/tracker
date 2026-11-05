@@ -37,7 +37,7 @@ export function render(ctx) {
   /* Питание */
   const logged = days.filter(d => totals(d).n > 0);
   const tg = targets(end || today());
-  const sum = logged.reduce((a, d) => { const t = totals(d); a.k += t.kcal; a.p += t.p; a.f += t.f; a.c += t.c; return a; }, { k: 0, p: 0, f: 0, c: 0 });
+  const sum = logged.reduce((a, d) => { const t = totals(d); a.k += t.kcal; a.p += t.p; a.f += t.f; a.c += t.c; a.fb += t.fb; return a; }, { k: 0, p: 0, f: 0, c: 0, fb: 0 });
   const n = logged.length || 1;
   const nutr = [
     h('div', { class: 'grid3' },
@@ -45,6 +45,7 @@ export function render(ctx) {
       stat('В кДж', num(sum.k / n * KJ)),
       stat('Дней с записями', `${logged.length} из ${days.length}`)),
     macroRow('Белки', 'c-p', sum.p / n, tg.p), macroRow('Жиры', 'c-f', sum.f / n, tg.f), macroRow('Углеводы', 'c-c', sum.c / n, tg.c),
+    macroRow('Клетчатка', 'c-fb', sum.fb / n, tg.fb),
   ];
   if (mode !== 'day') nutr.push(barChart(range(P.a, P.b).map(d => ({
     x: mode === 'week' ? WD_SHORT[parse(d).getDay()] : String(parse(d).getDate()), y: d <= today() ? totals(d).kcal : 0,
