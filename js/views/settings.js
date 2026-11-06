@@ -4,7 +4,7 @@ import { h, icon, btn, chips, stepper, sw, field, input, toast, card, stat, shee
 import { num, today, bmr, passiveFor, targetsAuto, targets, currentWeight, currentBf, GOALS, fmtDate, fiberFor } from '../calc.js';
 import * as sync from '../sync.js';
 
-export const VERSION = '1.2.2';
+export const VERSION = '1.3.0';
 const F = { tk: '', repo: '', pass: '', pass2: '', exp: '', needConfirm: false, code: '', jpass: '', busy: false, err: '' };
 export function setJoinCode(c) { F.code = c; }
 

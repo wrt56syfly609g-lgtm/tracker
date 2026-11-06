@@ -37,7 +37,8 @@ export function btn(text, onclick, cls = '', ic) {
 }
 
 // Число с кнопками − и +. onChange получает число или null.
-export function stepper({ value, step = 1, min = 0, max = 1e6, dec = 1, onChange, sm, label, placeholder = '' }) {
+// bare — только поле без кнопок (для узких строк).
+export function stepper({ value, step = 1, min = 0, max = 1e6, dec = 1, onChange, sm, bare, label, placeholder = '' }) {
   const inp = h('input', {
     inputmode: 'decimal', value: value == null ? '' : num(value, dec).replace(/\s/g, ''), placeholder,
     'aria-label': label, enterkeyhint: 'done',
@@ -48,10 +49,10 @@ export function stepper({ value, step = 1, min = 0, max = 1e6, dec = 1, onChange
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
   inp.addEventListener('focus', () => inp.select());
   const cur = () => parseNum(inp.value) ?? value ?? 0;
-  return h('div', { class: 'stepper' + (sm ? ' sm' : '') },
-    h('button', { type: 'button', 'aria-label': 'Меньше', onclick: () => commit(cur() - step) }, icon('minus', 'sm')),
+  return h('div', { class: 'stepper' + (sm ? ' sm' : '') + (bare ? ' bare' : '') },
+    !bare && h('button', { type: 'button', 'aria-label': 'Меньше', onclick: () => commit(cur() - step) }, icon('minus', 'sm')),
     inp,
-    h('button', { type: 'button', 'aria-label': 'Больше', onclick: () => commit(cur() + step) }, icon('plus', 'sm')),
+    !bare && h('button', { type: 'button', 'aria-label': 'Больше', onclick: () => commit(cur() + step) }, icon('plus', 'sm')),
   );
 }
 

@@ -2,7 +2,7 @@
 import { all, put } from '../store.js';
 import { h, icon, btn, chips, stepper, macroRow, card, stat } from '../ui.js';
 import { ring } from '../charts.js';
-import { num, signed, energy, targets, habitsSorted, isDone, readiness, fatigueWarning, workoutsOn, woMinutes, workSets, KJ, dayRec } from '../calc.js';
+import { num, signed, energy, targets, habitsSorted, isDone, readiness, fatigueWarning, workoutsOn, woMinutes, workSets, tonnage, KJ, dayRec } from '../calc.js';
 import { habitControl } from './habits.js';
 import { st as syncSt, keyDaysLeft } from '../sync.js';
 
@@ -57,7 +57,7 @@ export function render(ctx) {
     btn('Продолжить', () => ctx.go('workout'), 'primary block', 'player-play')];
   else if (doneW.length) wBody = doneW.map(w => {
     const sets = w.items.reduce((a, it) => a + workSets(it).length, 0);
-    const ton = w.items.reduce((a, it) => a + workSets(it).reduce((x, s) => x + s.w * s.r, 0), 0);
+    const ton = w.items.reduce((a, it) => a + tonnage(it), 0);
     return h('div', { class: 'grid3' }, stat('Время', woMinutes(w) + ' мин'), stat('Подходов', sets), stat('Тоннаж', num(ton) + ' кг'));
   });
   else wBody = [btn('Начать тренировку', () => ctx.go('workout'), 'primary block', 'barbell')];

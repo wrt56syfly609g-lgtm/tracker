@@ -164,26 +164,72 @@ export function fatigueWarning() {
 }
 
 /* ---------- силовые ---------- */
+// Тип упражнения — что записывается в подходе. s.w — вес (для «свой вес + груз» и «на время» — добавочный,
+// для резины — её сила, по желанию), s.r — повторы или секунды.
+// Упражнение «на каждую сторону» (uni): s.r — левая, s.r2 — правая, s.one = 'L' — подход только левой.
+export const KINDS = {
+  w: { l: 'С весом', a: 'Вес, кг', r: 'Повторы' },
+  bw: { l: 'Свой вес', a: null, r: 'Повторы' },
+  bwx: { l: 'Свой вес + груз', a: '+кг', r: 'Повторы' },
+  band: { l: 'Резина', a: 'Резина', r: 'Повторы' },
+  time: { l: 'На время', a: '+кг', r: 'Секунды' },
+};
+export const kindOf = exId => (KINDS[S.ex[exId]?.kind] ? S.ex[exId].kind : 'w');
+export const isUni = exId => !!S.ex[exId]?.uni;
+export const unitOf = k => (k === 'time' ? 'с' : 'повт.');
+
 // Расчётный максимум на 1 повтор (Эпли) с учётом запаса: вес × (1 + (повторы + запас) / 30).
 export const e1rm = (w, r, rir) => (w > 0 && r > 0 ? w * (1 + (r + (rir || 0)) / 30) : 0);
 export const rpe = rir => (rir == null ? null : 10 - rir);
-export const workSets = it => it.sets.filter(s => s.done && !s.warm && s.w > 0 && s.r > 0);
+// Стороны подхода: [['L', повторы], ['R', повторы]] для упражнения на каждую сторону, иначе [['', повторы]].
+export const sideReps = (s, uni) => (uni ? (s.one ? [['L', s.r]] : [['L', s.r], ['R', s.r2]]) : [['', s.r]]).filter(([, r]) => r > 0);
+export const setReps = (s, uni) => sideReps(s, uni).reduce((a, [, r]) => a + r, 0);
+export function workSets(it) {
+  const k = kindOf(it.ex), uni = isUni(it.ex);
+  return it.sets.filter(s => s.done && !s.warm && (k !== 'w' || s.w > 0) && sideReps(s, uni).length > 0);
+}
+// Тоннаж: только внешний вес (гиря, штанга, добавочный груз). Свой вес и резина в тоннаж не входят.
+export function tonnage(it) {
+  const k = kindOf(it.ex), uni = isUni(it.ex);
+  if (k !== 'w' && k !== 'bwx') return 0;
+  return workSets(it).reduce((a, s) => a + (s.w || 0) * setReps(s, uni), 0);
+}
+// Вес тела на дату (по модели) — для упражнений «свой вес + груз».
+export const bodyW = d => model().days[d]?.w ?? S.profile.weight;
+// Оценка подхода для прогресса и рекордов: с весом — расчётный максимум (для «свой вес + груз» с массой тела),
+// свой вес и резина — повторы, на время — секунды.
+export function score(k, w, r, rir, bwKg = 0) {
+  if (!(r > 0)) return 0;
+  if (k === 'w') return e1rm(w, r, rir);
+  if (k === 'bwx') return e1rm(bwKg + (w || 0), r, rir);
+  return r;
+}
+export const byLoad = k => k === 'w' || k === 'bwx';
 export const exName = id => S.ex[id]?.name || 'Упражнение';
-const exStep = id => S.ex[id]?.step || S.settings.step;
+const exStep = id => S.ex[id]?.step || (kindOf(id) === 'band' ? 1 : S.settings.step);
 export { exStep };
 
-// Все завершённые подходы по упражнению, от старых к новым.
+// Все завершённые тренировки с этим упражнением, от старых к новым.
 export function sessions(exId) {
+  const k = kindOf(exId), uni = isUni(exId);
   return all('wo', w => !w.active).sort((a, b) => a.start - b.start).flatMap(w => {
-    const it = w.items.find(i => i.ex === exId);
-    if (!it) return [];
+    const its = w.items.filter(i => i.ex === exId);
+    if (!its.length) return [];
+    const it = its.length === 1 ? its[0] : { ...its[0], sets: its.flatMap(i => i.sets) };
     const ws = workSets(it);
     if (!ws.length) return [];
+    const bwKg = k === 'bwx' ? bodyW(w.date) : 0, best = { '': 0, L: 0, R: 0 };
+    let pl = 0, pr = 0;
+    for (const s of ws) {
+      for (const [side, r] of sideReps(s, uni)) best[side] = Math.max(best[side], score(k, s.w, r, s.rir, bwKg));
+      if (uni && !s.one && s.r > 0 && s.r2 > 0) { pl += s.r; pr += s.r2; }
+    }
     const rpes = ws.filter(s => s.rir != null).map(s => 10 - s.rir);
     return [{
-      date: w.date, wo: w.id, start: w.start, sets: it.sets, tech: it.tech,
-      best: Math.max(...ws.map(s => e1rm(s.w, s.r, s.rir))), maxW: Math.max(...ws.map(s => s.w)),
-      reps: ws.reduce((a, s) => a + s.r, 0), vol: ws.reduce((a, s) => a + s.w * s.r, 0), rpe: avg(rpes),
+      date: w.date, wo: w.id, start: w.start, sets: it.sets, tech: it.tech, kind: k, uni,
+      best: Math.max(best[''], best.L, best.R), bestL: best.L, bestR: best.R, lr: pr > 0 ? pl / pr : null,
+      maxW: Math.max(0, ...ws.map(s => s.w || 0)),
+      reps: ws.reduce((a, s) => a + setReps(s, uni), 0), vol: tonnage(it), rpe: avg(rpes),
       allEasy: ws.length > 0 && ws.every(s => s.rir != null && s.rir >= 2),
     }];
   });
@@ -191,7 +237,31 @@ export function sessions(exId) {
 export const lastSession = (exId, notWo) => sessions(exId).filter(s => s.wo !== notWo).pop() || null;
 export function bestBefore(exId, wo) {
   const w = S.wo[wo]; const list = sessions(exId).filter(s => s.wo !== wo && (!w || s.start < w.start));
-  return { best: Math.max(0, ...list.map(s => s.best)), maxW: Math.max(0, ...list.map(s => s.maxW)), n: list.length };
+  const mx = f => Math.max(0, ...list.map(f));
+  return { best: mx(s => s.best), bestL: mx(s => s.bestL), bestR: mx(s => s.bestR), maxW: mx(s => s.maxW), n: list.length };
+}
+// Рекорд: подход лучше всех прошлых (у упражнений на каждую сторону — отдельно по сторонам) или с весом больше прежнего.
+export function isRecord(exId, s, prev, date) {
+  if (!prev.n || !s.done || s.warm) return false;
+  const k = kindOf(exId), uni = isUni(exId), bwKg = k === 'bwx' ? bodyW(date) : 0;
+  if (byLoad(k) && s.w > prev.maxW && s.r > 0) return true;
+  return sideReps(s, uni).some(([side, r]) => {
+    const ref = uni ? prev['best' + side] : prev.best;
+    return ref > 0 && score(k, s.w, r, s.rir, bwKg) > ref + 0.01;
+  });
 }
 export const pct = (a, b) => (b > 0 ? (a / b - 1) * 100 : null);
-export const setsText = sets => sets.filter(s => !s.warm && s.w != null && s.r).map(s => `${num(s.w, 2)}×${s.r}`).join(' · ');
+// Подход текстом: «16×10», «16×10/11» (левая/правая), «16×10 Л», «8», «+8×6», «30 с», «12 (рез. 15)».
+export function setText(s, k, uni) {
+  const v = x => (x == null ? '—' : num(x, 2));
+  const reps = uni ? (s.one ? `${v(s.r)} Л` : `${v(s.r)}/${v(s.r2)}`) : v(s.r);
+  const sec = k === 'time' ? ' с' : '';
+  if (k === 'w') return `${v(s.w)}×${reps}`;
+  if ((k === 'bwx' || k === 'time') && s.w > 0) return `+${v(s.w)}×${reps}${sec}`;
+  if (k === 'band' && s.w > 0) return `${reps} (рез. ${v(s.w)})`;
+  return reps + sec;
+}
+export function setsText(sets, exId) {
+  const k = kindOf(exId), uni = isUni(exId);
+  return sets.filter(s => s.done && !s.warm && (s.r || (uni && s.r2)) && (k !== 'w' || s.w != null)).map(s => setText(s, k, uni)).join(' · ');
+}
