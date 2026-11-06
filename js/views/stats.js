@@ -1,12 +1,13 @@
 // Раздел «Статистика»: день / неделя / месяц — питание, баланс и вес, рутина, тренировки, сон; прогресс упражнений.
 import { S, all, MUSCLES } from '../store.js';
-import { h, icon, ibtn, chips, card, stat, macroRow } from '../ui.js';
+import { h, icon, ibtn, btn, chips, card, stat, macroRow } from '../ui.js';
 import { lineChart, barChart } from '../charts.js';
 import {
   num, signed, avg, today, addDays, weekStart, monthStart, monthEnd, addMonths, range, fmtDate, fmtShort, parse, MONTHS, WD_SHORT,
   totals, energy, model, targets, habitsSorted, isDone, streak, dayRatio, dayRec, readiness, workoutsOn, woMinutes, woKcal,
-  workSets, sessions, exName, pct, setsText, KJ, KCAL_PER_KG, currentWeight, currentBf,
+  workSets, tonnage, sessions, exName, pct, setsText, KJ, KCAL_PER_KG, currentWeight, currentBf, kindOf, isUni, byLoad, unitOf,
 } from '../calc.js';
+import { reportSheet } from './exchange.js';
 
 let mode = 'week', anchor = today(), exSel = null;
 
@@ -88,7 +89,7 @@ export function render(ctx) {
   const muscle = Object.fromEntries(MUSCLES.map(m => [m, 0]));
   let ton = 0, setsN = 0;
   for (const w of wos) for (const it of w.items) {
-    const ws = workSets(it); setsN += ws.length; ton += ws.reduce((a, s) => a + s.w * s.r, 0);
+    const ws = workSets(it); setsN += ws.length; ton += tonnage(it);
     const m = S.ex[it.ex]?.muscle; if (m in muscle) muscle[m] += ws.length;
   }
   const srpes = wos.map(w => w.srpe).filter(v => v != null);
@@ -111,17 +112,36 @@ export function render(ctx) {
     const sel = h('select', { class: 'inp', id: 'ex-sel', 'aria-label': 'Упражнение' }, exWith.map(e => h('option', { value: e.id, selected: e.id === exSel }, e.name)));
     sel.addEventListener('change', () => { exSel = sel.value; ctx.render(); });
     const fmtPct = v => v == null ? '—' : signed(v, 1) + ' %';
+    const k = kindOf(exSel), uni = isUni(exSel), load = byLoad(k), dec = load ? 1 : 0, u = load ? ' кг' : ' ' + unitOf(k);
+    const lrs = uni ? ss.filter(s => s.lr != null) : [];
+    const lrPct = s => Math.round(s.lr * 100) + ' %';
+    const HINT = {
+      w: 'Расчётный максимум на 1 повтор: вес × (1 + (повторы + запас) / 30). Растёт и от веса, и от повторов.',
+      bwx: 'Считается вместе с весом тела по модели: (вес тела + груз) × (1 + (повторы + запас) / 30).',
+      bw: 'Лучший подход — больше всего повторов в одном подходе.',
+      band: 'Лучший подход — больше всего повторов в одном подходе.',
+      time: 'Лучшее время — самое долгое удержание в одном подходе.',
+    };
     out.push(card('Прогресс упражнения', 'chart-line', sel,
       h('div', { class: 'grid2' },
-        stat('Расчётный максимум', num(last.best, 1) + ' кг'),
-        stat('Лучший рабочий вес', num(Math.max(...ss.map(s => s.maxW)), 2) + ' кг'),
+        stat(load ? (k === 'bwx' ? 'Расч. максимум с весом тела' : 'Расчётный максимум') : k === 'time' ? 'Лучшее время' : 'Лучший подход', num(last.best, dec) + u),
+        load ? stat(k === 'bwx' ? 'Самый большой груз' : 'Лучший рабочий вес', num(Math.max(...ss.map(s => s.maxW)), 2) + ' кг')
+          : stat(k === 'time' ? 'Всего секунд в прошлый раз' : 'Всего повторов в прошлый раз', num(last.reps)),
         stat('К прошлому разу', fmtPct(prev ? pct(last.best, prev.best) : null), prev && last.best >= prev.best ? 'pos' : prev ? 'neg' : ''),
         stat('С начала', fmtPct(ss.length > 1 ? pct(last.best, first.best) : null), last.best >= first.best ? 'pos' : 'neg')),
-      lineChart(ss.map(s => ({ x: fmtShort(s.date), y: Math.round(s.best * 10) / 10 })), { dec: 1, unit: ' кг' }),
-      h('div', { class: 'hint' }, 'Расчётный максимум на 1 повтор: вес × (1 + (повторы + запас) / 30). Растёт и от веса, и от повторов.'),
+      lineChart(ss.map(s => ({ x: fmtShort(s.date), y: Math.round(s.best * 10 ** dec) / 10 ** dec })), { dec, unit: u }),
+      h('div', { class: 'hint' }, HINT[k] + (uni && !load ? ' Считается по лучшей стороне.' : '')),
+      uni ? [
+        h('div', { class: 'sec-label' }, 'Левая к правой'),
+        h('div', { class: 'grid2' },
+          stat('Прошлый раз', lrs.length ? lrPct(lrs[lrs.length - 1]) : '—', lrs.length && lrs[lrs.length - 1].lr >= 0.98 ? 'pos' : ''),
+          stat('В начале', lrs.length > 1 ? lrPct(lrs[0]) : '—')),
+        lrs.length > 1 ? lineChart(lrs.map(s => ({ x: fmtShort(s.date), y: Math.round(s.lr * 100) })), { unit: ' %', target: 100 }) : null,
+        h('div', { class: 'hint' }, 'Сумма повторов левой к правой в подходах на обе стороны. 100 % — стороны сравнялись.'),
+      ] : null,
       h('div', { class: 'list' }, ss.slice(-5).reverse().map(s => h('div', { class: 'item' },
-        h('div', { class: 't' }, h('b', { class: 'num' }, setsText(s.sets)), h('span', null, `${fmtDate(s.date)}${s.rpe ? ' · RPE ' + num(s.rpe, 1) : ''}${s.tech ? ' · техника ' + s.tech : ''}`)),
-        h('span', { class: 'num small' }, num(s.best, 1)))))));
+        h('div', { class: 't' }, h('b', { class: 'num' }, setsText(s.sets, exSel)), h('span', null, `${fmtDate(s.date)}${s.rpe ? ' · RPE ' + num(s.rpe, 1) : ''}${s.tech ? ' · техника ' + s.tech : ''}`)),
+        h('span', { class: 'num small' }, num(s.best, dec)))))));
   }
 
   /* Сон и самочувствие */
@@ -150,6 +170,10 @@ export function render(ctx) {
       ? [h('div', { class: 'grid2' }, stat('После сна 7,5+ ч', 'RPE ' + num(avg(good), 1)), stat('После сна меньше 7 ч', 'RPE ' + num(avg(bad), 1))),
         h('div', { class: 'hint' }, avg(good) < avg(bad) ? 'Когда высыпаешься, вес ощущается легче.' : 'Пока разницы в пользу сна не видно.')]
       : h('div', { class: 'empty' }, 'Нужно хотя бы по 2 тренировки после хорошего и плохого сна, с отмеченным запасом в подходах.')));
+
+  out.push(card('Отчёт для Claude', 'notes',
+    h('div', { class: 'muted small' }, 'Тренировки с подходами и запасом, вес, питание и сон за несколько недель одним текстом. Вставь его в чат с Claude — получишь разбор и правки к программе в формате импорта.'),
+    btn('Собрать отчёт', () => reportSheet(), 'soft block', 'notes')));
 
   return h('div', { class: 'stack', style: 'gap:14px' }, out);
 }

@@ -9,13 +9,13 @@ const X = await import('../js/exchange.js');
 
 function fresh() {
   store.replace({ v: 1, ex: {}, tpl: {}, habits: {}, hlog: {}, food: {}, days: {}, wo: {} });
-  store.put('ex', { id: 'ex-pullup', name: 'Подтягивания', muscle: 'Спина', rest: 150, step: null });
+  store.put('ex', { id: 'ex-pullup', name: 'Подтягивания', muscle: 'Спина', rest: 150, step: null, kind: 'bw' });
   store.put('ex', { id: 'ex-bench', name: 'Жим штанги лёжа', muscle: 'Грудь', rest: 180, step: null });
 }
 
 test('строка с параметрами в любом порядке', () => {
   const r = X.parseLine('Тяга гири в наклоне | 3×8–12/р | Спина | отдых 1:30 | шаг 8');
-  assert.deepEqual(r, { name: 'Тяга гири в наклоне', muscle: 'Спина', rest: 90, step: 8, sets: 3, goal: '8–12/р' });
+  assert.deepEqual(r, { name: 'Тяга гири в наклоне', muscle: 'Спина', rest: 90, step: 8, sets: 3, goal: '8–12', uni: true });
 });
 
 test('разные записи подходов и отдыха', () => {
@@ -69,9 +69,12 @@ test('таблица Markdown и строки с табуляцией', () => {
 B1\tТяга гири в наклоне\t24\t3 × 8–12/р\t90 с`);
   assert.equal(p.templates[0].name, 'День 1');
   assert.deepEqual(p.templates[0].items.map(i => [i.ex, i.sets, i.goal]), [
-    ['Подтягивания прямым хватом', 3, '5–6 · свой вес'],
-    ['Тяга гири в наклоне', 3, '8–12/р · 24'],
+    ['Подтягивания прямым хватом', 3, '5–6'],
+    ['Тяга гири в наклоне', 3, '8–12 · 24'],
   ]);
+  assert.equal(p.exercises[0].kind, 'bw');
+  assert.ok(!p.exercises[0].kindGuessed);
+  assert.ok(p.exercises[1].uni);
   assert.equal(p.exercises[0].rest, 150);
   assert.equal(p.exercises[1].rest, 90);
 });
@@ -107,7 +110,7 @@ test('экспорт текстом и JSON читается импортом о
   const t = store.put('tpl', { name: 'Д1', items: [{ ex: 'ex-pullup', sets: 3, goal: '5–6' }, { ex: e.id, sets: 4 }] });
   const sel = { tplIds: [t.id], exIds: ['ex-bench'] };
   const text = X.toText(sel);
-  assert.match(text, /Шаблон: Д1\nПодтягивания \| Спина \| 3×5–6 \| отдых 2:30\nТяга, гири \| Спина \| 4 подх\. \| отдых 1:30 \| шаг 8\n\nУпражнения:\nЖим штанги лёжа \| Грудь \| отдых 3:00\n/);
+  assert.match(text, /Шаблон: Д1\nПодтягивания \| Спина \| свой вес \| 3×5–6 \| отдых 2:30\nТяга, гири \| Спина \| 4 подх\. \| отдых 1:30 \| шаг 8\n\nУпражнения:\nЖим штанги лёжа \| Грудь \| отдых 3:00\n/);
   // В тексте «|» в названии заменяется запятой, в JSON название остаётся как есть.
   for (const [src, nm] of [[text, 'Тяга, гири'], [X.toJSON(sel), 'Тяга | гири']]) {
     const p = X.parseImport(src);

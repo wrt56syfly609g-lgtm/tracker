@@ -4,8 +4,10 @@
 //   Шаблон: Д1 Верх-сила
 //   Подтягивания | Спина | 3×5–6 | отдых 2:30 | шаг 8
 //   Отжимания от пола | Грудь | 3×8–12
+//   Тяга гири одной рукой | Спина | на каждую сторону | 3×8–12 | +1 подход левой | сразу следующее
+//   Передний вис | Спина | на время | 3×10–15 с
 //   Упражнения:
-//   Вис на перекладине | Предплечья
+//   Вис на перекладине | Предплечья | на время
 // После названия всё необязательно и в любом порядке. Разделители: | ; или табуляция.
 // Упражнения сопоставляются по названию (без учёта регистра и ё/е), поэтому не задваиваются.
 import { all, get, put, remove, MUSCLES } from './store.js';
@@ -44,6 +46,56 @@ const GUESS = [
 ];
 export const guessMuscle = name => { const s = norm(name); return (GUESS.find(([, re]) => re.test(s)) || ['Спина'])[0]; };
 
+/* ---------- тип упражнения, стороны, суперсеты ---------- */
+export const KIND_IDS = ['w', 'bw', 'bwx', 'band', 'time'];
+const KIND_TEXT = { w: 'с весом', bw: 'свой вес', bwx: 'свой вес + груз', band: 'резина', time: 'на время' };
+const KIND_WORDS = [
+  ['bwx', /^(?:свой вес|своим весом|вес тела)\s*\+\s*(?:груз|вес|отягощение|гиря|гири)$|^(?:с отягощением|с доп\S* весом|с дополнительным весом|с грузом)$/],
+  ['bw', /^(?:свой вес|своим весом|собственный вес|вес тела|без веса|без отягощения)$/],
+  ['band', /^(?:резина|резинка|резинки|с резиной|с резинкой|с резинками|с помощью резины)$/],
+  ['time', /^(?:на время|удержание|статика|в секундах|секунды)$/],
+  ['w', /^(?:с весом|с гирей|с гирями|с гантелью|с гантелями|со штангой)$/],
+];
+export const parseKind = t => {
+  const s = norm(t).replace(/^тип\s*[:—–-]?\s*/, '');
+  return (KIND_WORDS.find(([, re]) => re.test(s)) || [null])[0];
+};
+// Если тип не указан, угадываем по названию. Сначала снаряды: «Подъём гири» — с весом, хоть и «подъём».
+const KIND_GUESS = [
+  ['w', /гир|гантел|штанг|блок|тренаж|эспандер|бублик|смита/],
+  ['band', /резин|паллоф/],
+  ['time', /планк|удержан|статик/],
+  ['bw', /подтяг|отжим|брусь|вис|выход сил|пистолет|запрыгив|прыж|подъ[её]м\S* ног|скруч|бурпи|пого|выкручиван|полотенц/],
+];
+export const guessKind = name => { const s = norm(name); return (KIND_GUESS.find(([, re]) => re.test(s)) || ['w'])[0]; };
+const SEC = /^\d+(?:[.,]\d+)?(?:–\d+(?:[.,]\d+)?)?\s*(?:с|сек\S*)(?!\p{L})/u; // цель в секундах: «10–15 с»
+export const parseSide = t => /^(?:л\/п|л и п|на (?:каждую )?(?:сторону|руку|ногу)|по сторонам|каждой (?:рукой|ногой))$/.test(norm(t));
+// true — сразу следующее упражнение без отдыха (суперсет или круг), false — конец круга.
+export function parseLink(t) {
+  const s = norm(t);
+  if (/^(?:сразу следующее(?: упражнение)?|суперсет(?: со следующим)?|круг|в круге|без отдыха|→)$/.test(s)) return true;
+  if (/^(?:конец круга|конец суперсета|последнее в круге)$/.test(s)) return false;
+  return null;
+}
+// Метки в тексте цели: «/р», «/н», «на сторону», «левой 4 подхода, правой 3», «+1 подход левой», «…, сразу следующее».
+function readGoal(r) {
+  let g = r.goal, m;
+  if (!g) return;
+  const SIDE = /(^|[\s,])на\s+(?:каждую\s+)?(?:сторону|руку|ногу)(?!\p{L})|каждой\s+(?:рукой|ногой)/gu;
+  if (/\/[рн](?!\p{L})/u.test(g) || SIDE.test(g)) r.uni = true;
+  g = g.replace(/\s*\/[рн](?!\p{L})/gu, '').replace(SIDE, '$1');
+  if ((m = g.match(/левой\s+(\d)\s*(?:подх\S*)?\s*,?\s*правой\s+(\d)(?:\s*подх\S*)?/u))) {
+    const a = +m[1], b = +m[2];
+    if (a > b) { r.extra = a - b; if (!r.sets || r.sets === a) r.sets = b; }
+    r.uni = true; g = g.replace(m[0], '');
+  } else if ((m = g.match(/\+\s*(\d)\s*(?:подх\S*\s+)?(?:левой|л)(?!\p{L})/u))) {
+    r.extra = +m[1]; r.uni = true; g = g.replace(m[0], '');
+  }
+  if ((m = g.match(/(?:^|[,;·]\s*)(?:сразу следующее|суперсет со следующим)\s*$/u))) { r.link = true; g = g.replace(m[0], ''); }
+  g = g.replace(/(?:^|[,;·]\s*)конец круга\s*$/u, '');
+  r.goal = g.replace(/\s+([,;])/g, '$1').replace(/[,;·]\s*(?=[,;·]|$)/g, '').replace(/^\s*[,;·]\s*/, '').replace(/\s{2,}/g, ' ').trim() || null;
+}
+
 /* ---------- параметры строки ---------- */
 const tidy = s => String(s).replace(/(\d)\s*[–—-]\s*(\d)/g, '$1–$2').replace(/\s*\/\s*/g, '/').replace(/\s+/g, ' ').trim();
 
@@ -79,7 +131,7 @@ export function parseStep(t) {
   return v > 0 ? clamp(v, 0.5, 50) : null;
 }
 
-const isParam = t => !!(parseSets(t) || muscleOf(t) || parseRest(t) != null || parseStep(t) != null);
+const isParam = t => !!(parseSets(t) || muscleOf(t) || parseRest(t) != null || parseStep(t) != null || parseKind(t) || parseSide(t) || parseLink(t) != null);
 const CODE = /^(?:[A-ZА-ЯЁ]\d{0,2}|\d{1,2}[.)]?|№)$/u; // «A1», «S2», «B», «3.» в первой колонке таблицы
 const clean = s => String(s).replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').replace(/[\s:]+$/, '').trim();
 const plainOk = s => s.length <= 60 && /^[\p{L}\d«"(]/u.test(s) && !/[:.!?]$/.test(s) && !s.includes(': ') && s.split(' ').length <= 9;
@@ -110,16 +162,23 @@ export function parseLine(line) {
   const r = { name: clean(name), muscle: null, rest: null, step: null, sets: null, goal: null };
   if (!r.name || r.name.length > 80) return null;
   if (!params.length && !plainOk(r.name)) return null;
-  const extra = [];
+  const other = [];
   for (const p of params) {
     let v;
     if (r.sets == null && (v = parseSets(p))) { r.sets = v.sets; r.goal = v.goal; }
     else if (!r.muscle && (v = muscleOf(p))) r.muscle = v;
     else if (r.rest == null && (v = parseRest(p)) != null) r.rest = v;
     else if (r.step == null && (v = parseStep(p)) != null) r.step = v;
-    else extra.push(clean(p));
+    else if (r.kind == null && (v = parseKind(p))) r.kind = v;
+    else if (parseSide(p)) r.uni = true;
+    else if ((v = parseLink(p)) != null) r.link = v;
+    else other.push(clean(p));
   }
-  if (extra.length) r.goal = [r.goal, ...extra].filter(Boolean).join(' · ');
+  if (other.length) r.goal = [r.goal, ...other].filter(Boolean).join(' · ');
+  readGoal(r);
+  // Старый обход «отдых 0:15» у суперсета больше не нужен: отдых после круга берётся у последнего упражнения.
+  if (r.link && r.rest != null && r.rest <= 20) r.rest = null;
+  if (!r.link) delete r.link;
   return r;
 }
 
@@ -148,7 +207,7 @@ export function parseText(text) {
 // Приводит разобранное к единому виду: список упражнений без повторов + шаблоны со ссылками по названию.
 function finish({ lib = [], templates = [], skipped = [] }) {
   const out = { ...empty(), skipped };
-  const map = new Map();
+  const map = new Map(), secs = new Set();
   const addEx = e => {
     const name = clean(e.name ?? '');
     if (!name) return null;
@@ -161,6 +220,10 @@ function finish({ lib = [], templates = [], skipped = [] }) {
     if (!x.muscle && mu) x.muscle = mu;
     if (x.rest == null && rest) x.rest = rest;
     if (x.step == null && step) x.step = step;
+    const kind = KIND_IDS.includes(e.kind) ? e.kind : e.kind ? parseKind(e.kind) : null;
+    if (!x.kind && kind) x.kind = kind;
+    if (x.uni == null && e.uni != null) x.uni = !!e.uni;
+    if (e.goal && SEC.test(String(e.goal))) secs.add(k);
     return x;
   };
   lib.forEach(addEx);
@@ -172,15 +235,20 @@ function finish({ lib = [], templates = [], skipped = [] }) {
       const sets = clamp(Math.round(+it.sets || 3), 1, 12);
       let goal = it.goal != null && String(it.goal).trim() ? tidy(it.goal) : null;
       if (goal && goal.length > 80) goal = goal.slice(0, 79) + '…';
-      items.push({ ex: x.name, sets, goal });
+      const extra = clamp(Math.round(+it.extra || 0), 0, 5);
+      items.push({ ex: x.name, sets, goal, ...(extra ? { extra } : {}), ...(it.link === true ? { link: true } : {}) });
     }
     if (!items.length) continue;
+    delete items[items.length - 1].link;
     let name = clean(t.name || '') || 'Шаблон';
     const k = norm(name), n = (seen.get(k) || 0) + 1; seen.set(k, n);
     if (n > 1) name += ` (${n})`;
     out.templates.push({ name, items });
   }
-  for (const x of out.exercises) if (!x.muscle) { x.muscle = guessMuscle(x.name); x.guessed = true; }
+  for (const x of out.exercises) {
+    if (!x.muscle) { x.muscle = guessMuscle(x.name); x.guessed = true; }
+    if (!x.kind) { const g = secs.has(norm(x.name)) ? 'time' : guessKind(x.name); if (g !== 'w') { x.kind = g; x.kindGuessed = true; } }
+  }
   return out;
 }
 
@@ -217,13 +285,21 @@ export function parseImport(text) {
 }
 
 /* ---------- что изменится и применение ---------- */
-const FIELDS = ['muscle', 'rest', 'step'];
+const FIELDS = ['muscle', 'rest', 'step', 'kind', 'uni'];
+// Угаданное не перетирает выбранное вручную: группа — никогда, тип — только если у упражнения его ещё нет.
+function differs(f, e, cur) {
+  if (e[f] == null) return false;
+  if (f === 'muscle') return !e.guessed && e.muscle !== cur.muscle;
+  if (f === 'kind') return e.kindGuessed ? !cur.kind && e.kind !== 'w' : e.kind !== (cur.kind || 'w');
+  if (f === 'uni') return !!e.uni !== !!cur.uni;
+  return e[f] !== cur[f];
+}
 export function planImport(p) {
   const exBy = new Map(all('ex').map(e => [norm(e.name), e]));
   const tplBy = new Map(all('tpl').map(t => [norm(t.name), t]));
   const ex = p.exercises.map(e => {
     const cur = exBy.get(norm(e.name)) || null;
-    const diff = cur ? FIELDS.filter(f => e[f] != null && !(f === 'muscle' && e.guessed) && e[f] !== cur[f]) : [];
+    const diff = cur ? FIELDS.filter(f => differs(f, e, cur)) : [];
     return { ...e, cur, diff };
   });
   const tpl = p.templates.map(t => ({ ...t, cur: tplBy.get(norm(t.name)) || null }));
@@ -240,7 +316,7 @@ export function applyImport(plan, { overwrite = true } = {}) {
   const undo = [], ids = new Map();
   for (const e of plan.ex) {
     if (!e.cur) {
-      const rec = put('ex', { name: e.name, muscle: e.muscle, rest: e.rest ?? null, step: e.step ?? null });
+      const rec = put('ex', { name: e.name, muscle: e.muscle, rest: e.rest ?? null, step: e.step ?? null, ...(e.kind ? { kind: e.kind } : {}), ...(e.uni ? { uni: true } : {}) });
       ids.set(norm(e.name), rec.id);
       undo.push(() => remove('ex', rec.id));
       continue;
@@ -257,6 +333,8 @@ export function applyImport(plan, { overwrite = true } = {}) {
     const items = t.items.map(i => {
       const o = { ex: ids.get(norm(i.ex)), sets: i.sets };
       if (i.goal) o.goal = i.goal;
+      if (i.extra) o.extra = i.extra;
+      if (i.link) o.link = true;
       return o;
     }).filter(i => i.ex);
     if (t.cur) {
@@ -285,17 +363,26 @@ const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const fnum = v => String(v).replace('.', ',');
 const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
+// Тип пишется, если он не «с весом», или если без него импорт угадает другой тип (по названию или секундам в цели).
+const kindTok = (e, goal) => {
+  const k = KIND_IDS.includes(e.kind) ? e.kind : 'w';
+  if (k !== 'w') return KIND_TEXT[k];
+  return guessKind(e.name) !== 'w' || SEC.test(goal || '') ? KIND_TEXT.w : null;
+};
 export function toText(sel) {
   const { tpls, exs } = collect(sel);
-  const line = (e, extra = []) => [safe(e.name), e.muscle, ...extra, e.rest ? 'отдых ' + mmss(e.rest) : null, e.step ? 'шаг ' + fnum(e.step) : null].filter(Boolean).join(' | ');
+  const line = (e, mid = [], goal = null) => [safe(e.name), e.muscle, kindTok(e, goal), e.uni ? 'на каждую сторону' : null, ...mid,
+    e.rest ? 'отдых ' + mmss(e.rest) : null, e.step ? 'шаг ' + fnum(e.step) : null].filter(Boolean).join(' | ');
   const out = [`// Подход: упражнения и шаблоны, ${isoToday()}`], done = new Set();
   for (const t of tpls) {
     out.push('', 'Шаблон: ' + safe(t.name));
-    for (const i of t.items || []) {
-      const e = get('ex', i.ex); if (!e) continue;
-      out.push(line(e, [i.goal ? `${i.sets}×${safe(i.goal)}` : `${i.sets} подх.`]));
+    const its = (t.items || []).filter(i => get('ex', i.ex));
+    its.forEach((i, n) => {
+      const e = get('ex', i.ex);
+      out.push(line(e, [i.goal ? `${i.sets}×${safe(i.goal)}` : `${i.sets} подх.`,
+        e.uni && i.extra ? `+${i.extra} подход левой` : null, i.link && n < its.length - 1 ? 'сразу следующее' : null], i.goal));
       done.add(e.id);
-    }
+    });
   }
   const rest = exs.filter(e => !done.has(e.id));
   if (rest.length) { out.push('', 'Упражнения:'); rest.forEach(e => out.push(line(e))); }
@@ -307,8 +394,8 @@ export function toJSON(sel) {
   const compact = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== ''));
   return JSON.stringify({
     format: FORMAT, version: 1, date: isoToday(),
-    exercises: list.map(e => compact({ name: e.name, muscle: e.muscle, rest: e.rest, step: e.step })),
-    templates: tpls.map(t => ({ name: t.name, items: (t.items || []).filter(i => get('ex', i.ex)).map(i => compact({ ex: get('ex', i.ex).name, sets: i.sets, goal: i.goal })) })),
+    exercises: list.map(e => compact({ name: e.name, muscle: e.muscle, kind: KIND_IDS.includes(e.kind) ? e.kind : 'w', uni: e.uni || null, rest: e.rest, step: e.step })),
+    templates: tpls.map(t => ({ name: t.name, items: (t.items || []).filter(i => get('ex', i.ex)).map(i => compact({ ex: get('ex', i.ex).name, sets: i.sets, goal: i.goal, extra: i.extra || null, link: i.link || null })) })),
   }, null, 2) + '\n';
 }
 

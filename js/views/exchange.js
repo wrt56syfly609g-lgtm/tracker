@@ -1,8 +1,9 @@
 // Листы «Экспорт» и «Импорт»: программы (шаблоны целиком) и пачки отдельных упражнений.
 import { all, MUSCLES } from '../store.js';
 import { h, icon, btn, chips, sw, field, sheet, toast, stat } from '../ui.js';
-import { today } from '../calc.js';
+import { today, KINDS } from '../calc.js';
 import { collect, toText, toJSON, toLink, parseImport, planImport, applyImport } from '../exchange.js';
+import { report } from '../report.js';
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
 const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -84,15 +85,16 @@ export function exportSheet(pre = {}) {
 
 /* ---------- импорт ---------- */
 const EXAMPLE = `Шаблон: Верх
-Подтягивания | Спина | 3×6–10 | отдых 2:30
-Жим гири стоя | Плечи | 3×8–12/р | отдых 1:30 | шаг 8
+Подтягивания | Спина | свой вес | 3×6–10 | отдых 2:30
+Жим гири стоя одной рукой | Плечи | на каждую сторону | 3×8–12 | сразу следующее | шаг 8
+Тяга гири в наклоне | Спина | на каждую сторону | 3×8–12 | +1 подход левой | отдых 1:30 | шаг 8
 
 Шаблон: Низ
 Кубковый присед | Ноги | 3×8–12 | отдых 2:00
 
 Упражнения:
-Вис на полотенцах | Предплечья
-Планка | Кор
+Вис на полотенцах | Предплечья | на время
+Махи с резиной | Плечи | резина
 `;
 
 function help(set) {
@@ -104,14 +106,19 @@ function help(set) {
         h('li', null, 'Одна строка — одно упражнение. После названия всё необязательно и в любом порядке, через | или ;'),
         h('li', null, `Группа: ${MUSCLES.join(', ')}. Если не указать, подставится по названию.`),
         h('li', null, 'Подходы × повторы: 3×8–12, 4×6, 3×20–30 с. Отдых: отдых 90, отдых 2:30. Шаг веса: шаг 8.'),
+        h('li', null, 'Тип: с весом (если не указать), свой вес, свой вес + груз, резина, на время. Не указан — подставится по названию, а «3×20 с» — на время.'),
+        h('li', null, 'На каждую сторону: «на каждую сторону», «/р», «/н». Лишний подход левой: «+1 подход левой» или «левой 4 подхода, правой 3».'),
+        h('li', null, 'Суперсет или круг: «сразу следующее» (или «круг») у всех упражнений группы, кроме последнего. Отдых после круга берётся у последнего.'),
         h('li', null, '«Шаблон: название» начинает шаблон. Строки после «Упражнения:» просто добавятся в библиотеку.'),
         h('li', null, 'Упражнения с тем же названием не задваиваются. Шаблон с тем же названием заменится.'),
         h('li', null, 'Понимает и JSON из экспорта, и файл резервной копии.')),
       btn('Вставить пример', () => set(EXAMPLE), 'sm', 'notes')));
 }
 
-const DIFF_L = { muscle: 'группа', rest: 'отдых', step: 'шаг' };
-const fmtF = (f, v) => v == null ? 'как в настройках' : f === 'rest' ? mmss(v) : f === 'step' ? String(v).replace('.', ',') + ' кг' : v;
+const DIFF_L = { muscle: 'группа', rest: 'отдых', step: 'шаг', kind: 'тип', uni: 'стороны' };
+const fmtF = (f, v) => f === 'kind' ? KINDS[v || 'w'].l.toLowerCase() : f === 'uni' ? (v ? 'Л и П отдельно' : 'обе сразу')
+  : v == null ? 'как в настройках' : f === 'rest' ? mmss(v) : f === 'step' ? String(v).replace('.', ',') + ' кг' : v;
+const itemText = i => i.ex + (i.goal ? ` ${i.sets}×${i.goal}` : ` ×${i.sets}`) + (i.extra ? ` +${i.extra} Л` : '') + (i.link ? ' →' : '');
 
 function preview(text, st, onApply) {
   if (!text.trim()) return [];
@@ -123,15 +130,16 @@ function preview(text, st, onApply) {
     out.push(h('div', { class: 'grid3' }, stat('Новых упражнений', plan.newEx.length), stat('Уже есть', plan.sameEx.length), stat('Шаблонов', plan.tpl.length)));
     if (plan.tpl.length) out.push(h('div', { class: 'list' }, plan.tpl.map(t => h('div', { class: 'item' },
       h('div', { class: 't' }, h('b', null, t.name),
-        h('span', null, t.items.map(i => i.ex + (i.goal ? ` ${i.sets}×${i.goal}` : ` ×${i.sets}`)).join(', '))),
+        h('span', null, t.items.map(itemText).join(', '))),
       h('span', { class: 'tag' + (t.cur ? ' gold' : ' acc') }, t.cur ? 'заменит' : 'новый')))));
     if (plan.updTpl.length) out.push(h('div', { class: 'hint' }, `Шаблон с таким названием уже есть: ${plan.updTpl.map(t => t.name).join(', ')}. Его состав заменится, прошлые тренировки не тронутся.`));
     if (plan.newEx.length) out.push(h('details', { class: 'more' },
       h('summary', null, `Новые упражнения · ${plan.newEx.length}`),
       h('div', { class: 'list' }, plan.newEx.slice().sort((a, b) => a.name.localeCompare(b.name, 'ru')).map(e => h('div', { class: 'item' },
         h('div', { class: 't' }, h('b', null, e.name),
-          h('span', null, [e.muscle + (e.guessed ? ' (?)' : ''), e.rest && 'отдых ' + mmss(e.rest), e.step && 'шаг ' + fmtF('step', e.step)].filter(Boolean).join(' · '))))))));
-    if (plan.guessed.length) out.push(h('div', { class: 'hint' }, `У ${plan.guessed.length} упр. группа мышц не указана, подставил по названию (отмечены «?»). Поменять можно в библиотеке.`));
+          h('span', null, [e.muscle + (e.guessed ? ' (?)' : ''), e.kind && e.kind !== 'w' && fmtF('kind', e.kind) + (e.kindGuessed ? ' (?)' : ''), e.uni && 'Л и П',
+            e.rest && 'отдых ' + mmss(e.rest), e.step && 'шаг ' + fmtF('step', e.step)].filter(Boolean).join(' · '))))))));
+    if (plan.guessed.length || plan.newEx.some(e => e.kindGuessed)) out.push(h('div', { class: 'hint' }, 'Что не указано (группа мышц, тип), подставил по названию — отмечено «?». Поменять можно в библиотеке.'));
     if (plan.changedEx.length) out.push(row('Обновить настройки у упражнений, которые уже есть', sw(st.overwrite, v => st.set(v), 'Обновить настройки'),
       plan.changedEx.slice(0, 6).map(e => `${e.name}: ${e.diff.map(f => `${DIFF_L[f]} ${fmtF(f, e.cur[f])} → ${fmtF(f, e[f])}`).join(', ')}`).join('; ')
       + (plan.changedEx.length > 6 ? ` и ещё ${plan.changedEx.length - 6}` : '')));
@@ -174,5 +182,30 @@ export function importSheet(initial = '') {
         }, '', 'clipboard') : null,
         btn('Из файла', () => file.click(), '', 'upload')),
       file, prev, help(set));
+  });
+}
+
+/* ---------- отчёт для Claude ---------- */
+export function reportSheet() {
+  let weeks = 4, prog = true;
+  sheet('Отчёт для Claude', () => {
+    const body = h('div', { class: 'stack' });
+    const draw = () => {
+      const text = report({ weeks, program: prog });
+      const name = `podhod-otchet-${today()}.txt`;
+      body.replaceChildren(
+        h('div', { class: 'hint' }, 'Тренировки с подходами и запасом, вес, питание и сон. Скопируй и вставь в чат с Claude: он разберёт и пришлёт правки к программе в формате импорта.'),
+        field('Период', chips({ cls: 'seg', allowNone: false, value: weeks, opts: [2, 4, 8].map(v => ({ v, l: `${v} нед.` })), onChange: v => { weeks = v; draw(); } })),
+        row('Добавить текущую программу', sw(prog, v => { prog = v; draw(); }, 'Добавить текущую программу'), 'Шаблоны в формате импорта, чтобы правки пришли к ним же.'),
+        h('textarea', { class: 'inp mono', readonly: true, rows: 10, spellcheck: 'false', value: text, 'aria-label': 'Текст отчёта' }),
+        h('div', { class: 'hint' }, `${text.trim().split('\n').length} строк, около ${Math.max(1, Math.round(text.length / 1000))} тыс. знаков.`),
+        h('div', { class: 'grid2' },
+          btn('Скопировать', () => copy(text, 'Отчёт скопирован. Вставь его в чат с Claude.'), 'primary', 'copy'),
+          navigator.share
+            ? btn('Поделиться', async () => { try { await navigator.share({ title: 'Отчёт «Подхода»', text }); } catch (e) { if (e?.name !== 'AbortError') toast('Не получилось поделиться. Скопируй текст.'); } }, '', 'share')
+            : btn('Скачать файл', () => download(text, name, 'text/plain;charset=utf-8'), '', 'download')));
+    };
+    draw();
+    return body;
   });
 }
