@@ -1,6 +1,6 @@
 // Сервис-воркер: хранит файлы приложения на устройстве, чтобы оно работало без интернета.
 // При выпуске новой версии меняй VERSION — устройства скачают обновление при следующем запуске.
-const VERSION = 'podhod-1.2.1';
+const VERSION = 'podhod-1.2.2';
 const FILES = [
   './',
   'css/app.css',
@@ -36,10 +36,15 @@ const FILES = [
   'vendor/qrcode.js',
 ];
 
+// Каждый файл берётся заново с сервера: метка ?v= обходит кэш GitHub Pages, иначе сразу после выпуска
+// часть файлов могла прийти старой, а часть новой, и приложение не запускалось (пустой экран).
+// Если хоть один файл не скачался, новая версия не ставится и остаётся прежняя.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION)
-    .then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))
-    .then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => Promise.all(FILES.map(async f => {
+    const r = await fetch(new Request(f + '?v=' + VERSION, { cache: 'reload' }));
+    if (!r.ok) throw new Error(`${f}: ${r.status}`);
+    await c.put(f, r);
+  }))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()

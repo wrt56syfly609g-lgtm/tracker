@@ -122,7 +122,8 @@ function swipe() {
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   const had = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
+  // При каждом запуске проверяем, не вышла ли новая версия (сам браузер проверяет не всегда).
+  navigator.serviceWorker.register('sw.js').then(r => r.active && r.update()).catch(e => console.warn('SW', e));
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (had) toast('Приложение обновлено.', 'Перезапустить', () => location.reload(), 15000);
   });
@@ -141,6 +142,7 @@ async function start() {
   swipe();
   route();
   resumeRest(all('wo', w => w.active).length > 0);
+  window.podhodStarted = true; // для страховки в index.html: приложение запустилось
   sync.init();
   registerSW();
   // Обновлять «прошло минут» во время тренировки
