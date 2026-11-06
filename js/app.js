@@ -4,7 +4,7 @@ import { load, onChange, S, all } from './store.js';
 import { h, icon, ibtn, toast } from './ui.js';
 import { today, addDays, fmtDate, weekday } from './calc.js';
 import * as sync from './sync.js';
-import { keepAwake } from './timer.js';
+import { keepAwake, resumeRest } from './timer.js';
 import * as todayV from './views/today.js';
 import * as habitsV from './views/habits.js';
 import * as foodV from './views/food.js';
@@ -140,6 +140,7 @@ async function start() {
   addEventListener('hashchange', route);
   swipe();
   route();
+  resumeRest(all('wo', w => w.active).length > 0);
   sync.init();
   registerSW();
   // Обновлять «прошло минут» во время тренировки

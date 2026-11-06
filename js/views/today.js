@@ -4,6 +4,7 @@ import { h, icon, btn, chips, stepper, macroRow, card, stat } from '../ui.js';
 import { ring } from '../charts.js';
 import { num, signed, energy, targets, habitsSorted, isDone, readiness, fatigueWarning, workoutsOn, woMinutes, workSets, KJ, dayRec } from '../calc.js';
 import { habitControl } from './habits.js';
+import { st as syncSt, keyDaysLeft } from '../sync.js';
 
 export function setDay(d, p) {
   const r = dayRec(d) || { id: d };
@@ -19,6 +20,13 @@ export function render(ctx) {
     h('div', null, h('b', null, 'Три тяжёлые тренировки подряд. '), 'Общая усталость была 8 и выше. Следующую можно облегчить: примерно −10 % веса или на один подход меньше.')));
   else if (rd != null && rd < 45) out.push(h('div', { class: 'banner' }, icon('bolt'),
     h('div', null, `Готовность сегодня ${rd} из 100. Если тренируешься, ориентируйся на запас 2–3 повтора.`)));
+
+  // Ключ GitHub скоро истечёт: без него синхронизация остановится.
+  const dl = syncSt.on ? keyDaysLeft() : null;
+  if (dl != null && dl <= 14) out.push(h('div', { class: 'banner' }, icon('alert-triangle'),
+    h('div', { class: 'grow' }, dl < 0 ? 'Ключ GitHub истёк, синхронизация не работает. ' : `Ключ GitHub истекает через ${dl} дн. `,
+      'Создай новый и замени его в настройках.'),
+    btn('Открыть', () => ctx.go('settings'), 'sm')));
 
   // Калории
   const left = tg.kcal - t.kcal;
