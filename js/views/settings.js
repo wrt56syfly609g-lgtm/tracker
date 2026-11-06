@@ -4,8 +4,8 @@ import { h, icon, btn, chips, stepper, sw, field, input, toast, card, stat, shee
 import { num, today, bmr, passiveFor, targetsAuto, targets, currentWeight, currentBf, GOALS, fmtDate, fiberFor } from '../calc.js';
 import * as sync from '../sync.js';
 
-export const VERSION = '1.2.0';
-const F = { tk: '', repo: '', pass: '', pass2: '', needConfirm: false, code: '', jpass: '', busy: false, err: '' };
+export const VERSION = '1.2.1';
+const F = { tk: '', repo: '', pass: '', pass2: '', exp: '', needConfirm: false, code: '', jpass: '', busy: false, err: '' };
 export function setJoinCode(c) { F.code = c; }
 
 const row = (label, control, hint) => h('div', { class: 'row between', style: 'gap:12px' },
@@ -95,6 +95,66 @@ function txt(key, ph, id) {
   return i;
 }
 
+function dateInp(key, id) {
+  const i = input({ type: 'date', value: F[key], id, min: today() });
+  i.addEventListener('input', () => { F[key] = i.value; });
+  return i;
+}
+const fmtExp = d => `${fmtDate(d)} ${d.slice(0, 4)}`;
+
+// Срок ключа GitHub: когда истекает и сколько осталось.
+function keyStatus() {
+  const exp = sync.st.exp, dl = sync.keyDaysLeft();
+  if (!exp) return h('div', { class: 'row between', style: 'gap:12px' },
+    h('div', { class: 'hint grow' }, 'Срок ключа GitHub не указан. Укажи его, и приложение напомнит заранее.'),
+    btn('Указать', setExpSheet, 'sm', 'calendar'));
+  const text = dl < 0 ? `Ключ GitHub истёк ${fmtExp(exp)}. Создай новый и нажми «Заменить ключ».`
+    : dl <= 14 ? `Ключ GitHub истекает ${fmtExp(exp)}, осталось ${dl} дн. Создай новый и нажми «Заменить ключ».`
+    : `Ключ GitHub действует до ${fmtExp(exp)}.`;
+  return dl <= 14 ? h('div', { class: 'banner' }, icon('alert-triangle'), h('div', null, text))
+    : h('div', { class: 'row between', style: 'gap:12px' }, h('div', { class: 'hint grow' }, text), btn('Изменить', setExpSheet, 'sm ghost', 'calendar'));
+}
+
+function setExpSheet() {
+  let v = sync.st.exp || '';
+  sheet('Срок ключа', close => {
+    const i = input({ type: 'date', value: v, id: 'key-exp' });
+    i.addEventListener('input', () => { v = i.value; });
+    return h('div', { class: 'stack' },
+      h('div', { class: 'hint' }, 'Дата из поля Expiration при создании ключа. Её видно на github.com → Settings → Developer settings → Fine-grained tokens.'),
+      field('Ключ действует до', i),
+      h('div', { class: 'grid2' }, btn('Отмена', close),
+        btn('Сохранить', async () => { await sync.setKeyExp(v || null); close(); refresh(); }, 'primary', 'check')));
+  });
+}
+
+function replaceKey() {
+  const D = { tk: '', exp: '', busy: false, err: '' };
+  sheet('Заменить ключ', close => {
+    const body = h('div', { class: 'stack' });
+    const draw = () => {
+      const tk = input({ type: 'password', value: D.tk, placeholder: 'github_pat_…', autocomplete: 'off', id: 'new-token' });
+      tk.addEventListener('input', () => { D.tk = tk.value; });
+      const ex = input({ type: 'date', value: D.exp, id: 'new-token-exp', min: today() });
+      ex.addEventListener('input', () => { D.exp = ex.value; });
+      body.replaceChildren(
+        h('div', { class: 'hint' }, 'Создай новый ключ так же, как первый (инструкция в README): доступ только к репозиторию с данными, Contents: Read and write. Пароль шифрования остаётся прежним.'),
+        D.err && h('div', { class: 'banner' }, icon('alert-triangle'), h('div', null, D.err)),
+        field('Новый ключ доступа GitHub', tk),
+        field('Ключ действует до', ex, 'Необязательно, но тогда приложение напомнит заранее.'),
+        h('div', { class: 'hint' }, 'Другие устройства получат новый ключ сами при следующей синхронизации, если их старый ключ ещё работает. Если уже истёк — подключи их заново по QR-коду.'),
+        h('div', { class: 'grid2' }, btn('Отмена', close),
+          h('button', { type: 'button', class: 'btn primary', disabled: D.busy, onclick: async () => {
+            D.busy = true; D.err = ''; draw();
+            try { await sync.replaceToken(D.tk, D.exp || null); close(); toast('Ключ заменён.'); refresh(); }
+            catch (e) { D.err = e.message || String(e); D.busy = false; draw(); }
+          } }, icon('check'), D.busy ? 'Проверяю…' : 'Заменить')));
+    };
+    draw();
+    return body;
+  });
+}
+
 function syncBody() {
   const st = sync.st;
   const head = h('div', { class: 'card-h' }, icon(st.on ? 'cloud' : 'cloud-off'), h('h2', null, 'Синхронизация'));
@@ -103,12 +163,15 @@ function syncBody() {
     return [head,
       h('div', { class: st.state === 'error' ? 'banner' : 'banner info' }, icon(st.state === 'error' ? 'alert-triangle' : 'lock'),
         h('div', null, h('b', null, label), h('br'), h('span', { class: 'small' }, `Репозиторий ${st.repo}. ${st.last ? 'Последняя синхронизация ' + new Date(st.last).toLocaleString('ru-RU') + '.' : ''}`))),
+      keyStatus(),
       h('div', { class: 'grid2' },
         btn('Синхронизировать', () => sync.syncNow(), '', 'refresh'),
         btn('Подключить телефон / ПК', showSetup, 'soft', 'qrcode')),
       h('div', { class: 'grid2' },
         btn('История версий', showHistory, '', 'history'),
-        btn('Отключить', () => confirmSheet('Отключить синхронизацию?', 'Данные останутся на этом устройстве и в репозитории. Подключиться снова можно в любой момент.', 'Отключить', () => sync.disconnect()), 'danger', 'logout'))];
+        btn('Заменить ключ', replaceKey, '', 'lock')),
+      h('div', { class: 'hint' }, 'Отправка в GitHub идёт через минуту после правок, сразу при сворачивании и после тренировки. Во время тренировки — только при сворачивании, чтобы не плодить версии.'),
+      btn('Отключить', () => confirmSheet('Отключить синхронизацию?', 'Данные останутся на этом устройстве и в репозитории. Подключиться снова можно в любой момент.', 'Отключить', () => sync.disconnect()), 'ghost sm danger', 'logout')];
   }
   if (!F.repo) F.repo = guessRepo();
   return [head,
@@ -116,12 +179,13 @@ function syncBody() {
     F.err && h('div', { class: 'banner' }, icon('alert-triangle'), h('div', null, F.err)),
     h('div', { class: 'sec-label' }, 'Первое устройство'),
     field('Ключ доступа GitHub', pwd('tk', 'github_pat_…', 'sync-token'), 'Fine-grained token с правом Contents: Read and write только на репозиторий с данными.'),
+    field('Ключ действует до', dateInp('exp', 'sync-exp'), 'Необязательно. Дата из поля Expiration при создании ключа: приложение напомнит за две недели.'),
     field('Репозиторий с данными', txt('repo', 'владелец/tracker-data', 'sync-repo')),
     field('Пароль шифрования', pwd('pass', 'не меньше 8 символов', 'sync-pass')),
     F.needConfirm && field('Повтори пароль', pwd('pass2', 'ещё раз', 'sync-pass2')),
     h('button', { type: 'button', class: 'btn primary block', disabled: F.busy, onclick: () => run(async () => {
-      const had = await sync.connect(F.tk, F.repo, F.pass, F.needConfirm ? F.pass2 : undefined);
-      Object.assign(F, { tk: '', pass: '', pass2: '', needConfirm: false });
+      const had = await sync.connect(F.tk, F.repo, F.pass, F.needConfirm ? F.pass2 : undefined, F.exp || null);
+      Object.assign(F, { tk: '', pass: '', pass2: '', exp: '', needConfirm: false });
       toast(had ? 'Подключено, данные объединены.' : 'Подключено. Данные зашифрованы и отправлены.');
     }) }, icon('lock'), F.busy ? 'Подключаю…' : 'Подключить'),
     h('div', { class: 'hr' }),
@@ -193,17 +257,40 @@ async function scanQR() {
 }
 
 async function showHistory() {
-  let list;
-  try { list = await sync.history(); } catch (e) { toast(e.message); return; }
-  sheet('История версий', close => h('div', { class: 'stack' },
-    h('div', { class: 'hint' }, 'GitHub хранит каждую синхронизацию. Можно вернуть данные к любой версии: текущие данные заменятся выбранными на всех устройствах.'),
-    list.length ? h('div', { class: 'list' }, list.map((c, i) => h('div', { class: 'item' },
-      h('div', { class: 't' }, h('b', null, new Date(c.date).toLocaleString('ru-RU')), h('span', null, i === 0 ? 'текущая' : c.sha.slice(0, 7))),
-      i > 0 && btn('Вернуть', () => confirmSheet('Вернуть эту версию?', `Данные станут такими, как были ${new Date(c.date).toLocaleString('ru-RU')}.`, 'Вернуть', async () => {
-        close();
-        try { await sync.restore(c.sha); toast('Версия восстановлена.'); } catch (e) { toast(e.message); }
-      }), 'sm')))) : h('div', { class: 'empty' }, 'Версий пока нет.')));
+  let page = 1, items = [], more = false;
+  try { ({ items, more } = await sync.history(page)); } catch (e) { toast(e.message); return; }
+  const fmtT = d => new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const ask = (c, close) => confirmSheet('Вернуть эту версию?', `Данные станут такими, как были ${new Date(c.date).toLocaleString('ru-RU')}.`, 'Вернуть', async () => {
+    close();
+    try { await sync.restore(c.sha); toast('Версия восстановлена.'); } catch (e) { toast(e.message); }
+  });
+  sheet('История версий', close => {
+    const body = h('div', { class: 'stack' });
+    const draw = () => {
+      const days = sync.byDay(items), cur = items[0]?.sha;
+      body.replaceChildren(
+        h('div', { class: 'hint' }, 'GitHub хранит каждую синхронизацию. «Конец дня» возвращает данные такими, какими они были вечером того дня. Текущие данные заменятся выбранными на всех устройствах.'),
+        days.length ? h('div', { class: 'list' }, days.map(g => {
+          const endOfDay = g.items[0], isCur = endOfDay.sha === cur;
+          return h('div', { class: 'item', style: 'display:block' },
+            h('div', { class: 'row between', style: 'gap:10px' },
+              h('div', { class: 't' }, h('b', null, `${fmtDate(g.day)} ${g.day.slice(0, 4)}`), h('span', null, `${g.items.length} ${plural(g.items.length)} · последняя в ${fmtT(endOfDay.date)}`)),
+              isCur ? h('span', { class: 'tag' }, 'текущая') : btn('Конец дня', () => ask(endOfDay, close), 'sm')),
+            g.items.length > 1 ? h('details', { class: 'more', style: 'margin-top:6px' },
+              h('summary', { class: 'small muted' }, 'Все версии дня'),
+              h('div', { class: 'list' }, g.items.map(c => h('div', { class: 'item' },
+                h('div', { class: 't' }, h('b', { class: 'num' }, fmtT(c.date)), h('span', null, c.sha.slice(0, 7))),
+                c.sha === cur ? h('span', { class: 'tag' }, 'текущая') : btn('Вернуть', () => ask(c, close), 'sm ghost'))))) : null);
+        })) : h('div', { class: 'empty' }, 'Версий пока нет.'),
+        more ? btn('Показать раньше', async () => {
+          try { const r = await sync.history(++page); items = items.concat(r.items); more = r.more; draw(); } catch (e) { page--; toast(e.message); }
+        }, 'ghost', 'history') : null);
+    };
+    draw();
+    return body;
+  });
 }
+const plural = n => (n % 10 === 1 && n % 100 !== 11 ? 'версия' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'версии' : 'версий');
 
 /* ---------- резервная копия ---------- */
 function backupCard() {

@@ -22,13 +22,30 @@ function beep() {
   });
 }
 
+// Таймер хранится и на устройстве: если Android выгрузит приложение во время отдыха, после открытия он продолжится.
+const KEY = 'podhod-rest';
+const remember = () => { try { localStorage.setItem(KEY, JSON.stringify({ endsAt, total })); } catch { /* не критично */ } };
+const forget = () => { try { localStorage.removeItem(KEY); } catch { /* не критично */ } };
+
 export function startRest(sec) {
   unlockAudio();
   total = sec; endsAt = Date.now() + sec * 1000; beeped = false;
+  remember();
   clearInterval(iv); iv = setInterval(tick, 250); tick();
 }
-export const addRest = s => { endsAt += s * 1000; total = Math.max(total + s, 1); if (endsAt > Date.now()) beeped = false; tick(); };
-export function stopRest() { clearInterval(iv); iv = null; const e = el(); if (e) e.hidden = true; document.body.classList.remove('resting'); }
+export const addRest = s => { endsAt += s * 1000; total = Math.max(total + s, 1); if (endsAt > Date.now()) beeped = false; remember(); tick(); };
+export function stopRest() { clearInterval(iv); iv = null; forget(); const e = el(); if (e) e.hidden = true; document.body.classList.remove('resting'); }
+
+// Продолжить таймер после перезапуска приложения (только если идёт тренировка).
+export function resumeRest(active) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { saved = null; }
+  if (!saved) return;
+  if (!active || !(saved.endsAt > Date.now() - 120000)) { forget(); return; }
+  endsAt = saved.endsAt; total = Math.max(1, saved.total || 1);
+  beeped = endsAt <= Date.now(); // время вышло, пока приложение было закрыто: без запоздалого сигнала
+  clearInterval(iv); iv = setInterval(tick, 250); tick();
+}
 
 function tick() {
   const e = el(); if (!e) return;

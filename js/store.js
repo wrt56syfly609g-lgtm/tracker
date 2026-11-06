@@ -28,17 +28,20 @@ export let S = null;   // текущее состояние
 export let rev = 0;    // номер версии в памяти (для кэша расчётов)
 const subs = new Set();
 export const onChange = fn => subs.add(fn);
-let saveT = null, syncHook = null;
+let saveT = null, syncHook = null, dirty = false;
 export const setSyncHook = fn => { syncHook = fn; };
 
 function changed(local = true) {
   rev++;
+  dirty = true;
   clearTimeout(saveT);
-  saveT = setTimeout(() => kvSet('state', S).catch(console.error), 200);
+  saveT = setTimeout(() => flush().catch(console.error), 200);
   subs.forEach(f => f());
   if (local && syncHook) syncHook();
 }
-export async function flush() { clearTimeout(saveT); await kvSet('state', S); }
+export async function flush() { clearTimeout(saveT); dirty = false; await kvSet('state', S); }
+// При сворачивании или закрытии сохраняем сразу, не дожидаясь задержки: Android может выгрузить приложение.
+const flushIfDirty = () => { if (dirty && S) flush().catch(console.error); };
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const all = (col, fn) => Object.values(S[col]).filter(r => !r.deleted && (!fn || fn(r)));
@@ -87,6 +90,8 @@ export async function load() {
   normalize();
   if (!s) { try { await flush(); } catch (e) { console.error(e); } }
   try { navigator.storage?.persist?.(); } catch { /* не критично */ }
+  addEventListener('pagehide', flushIfDirty);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushIfDirty(); });
 }
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
