@@ -1,6 +1,6 @@
 // Сервис-воркер: хранит файлы приложения на устройстве, чтобы оно работало без интернета.
 // При выпуске новой версии меняй VERSION — устройства скачают обновление при следующем запуске.
-const VERSION = 'podhod-1.2.1';
+const VERSION = 'podhod-1.2.2';
 const FILES = [
   './',
   'css/app.css',
@@ -36,16 +36,40 @@ const FILES = [
   'vendor/qrcode.js',
 ];
 
+// Каждый файл берётся заново с сервера: метка ?v= обходит кэш GitHub Pages, иначе сразу после выпуска
+// часть файлов могла прийти старой, а часть новой, и приложение не запускалось (пустой экран).
+// Если хоть один файл не скачался, новая версия не ставится и остаётся прежняя.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION)
-    .then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))
-    .then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => Promise.all(FILES.map(async f => {
+    const r = await fetch(new Request(f + '?v=' + VERSION, { cache: 'reload' }));
+    if (!r.ok) throw new Error(`${f}: ${r.status}`);
+    await c.put(f, r);
+  }))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
     .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
+    .then(() => self.clients.claim())
+    .then(reviveStuck));
 });
+
+// Окна, где приложение не запустилось (например, пустой экран после неудачного обновления),
+// перезагружаем сами, уже с новыми файлами. Запущенное приложение отвечает на ping и не трогается:
+// ему покажется «Приложение обновлено». Данные при перезагрузке не теряются.
+async function reviveStuck() {
+  const list = await self.clients.matchAll({ type: 'window' });
+  await Promise.all(list.map(c => new Promise(done => {
+    const ch = new MessageChannel();
+    let alive = false;
+    ch.port1.onmessage = () => { alive = true; };
+    try { c.postMessage({ type: 'podhod-ping' }, [ch.port2]); } catch { /* окно уже закрыто */ }
+    setTimeout(() => {
+      // navigate не ждём: перезагрузка сама ждёт окончания активации, иначе была бы взаимная блокировка.
+      if (!alive) Promise.resolve().then(() => c.navigate(c.url)).catch(() => {});
+      done();
+    }, 1500);
+  })));
+}
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;

@@ -24,6 +24,28 @@
 <div id="rest" class="rest" hidden></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <noscript>Для работы приложения нужен JavaScript.</noscript>
+<script>
+// Страховка: если приложение не запустилось за 8 секунд (например, обновление скачалось не целиком),
+// показываем кнопку, которая удаляет только сохранённые файлы приложения и загружает их заново.
+// Данные (IndexedDB) не трогаются.
+setTimeout(function () {
+  if (window.podhodStarted) return;
+  var box = document.createElement('div');
+  box.setAttribute('role', 'alert');
+  box.style.cssText = 'position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;background:#0F1115;color:#E9EBF0;font:16px/1.45 system-ui,sans-serif';
+  box.innerHTML = '<div style="max-width:420px"><b style="font-size:20px">Подход не запустился</b>' +
+    '<p>Скорее всего, обновление скачалось не целиком. Твои данные на месте: они хранятся отдельно от файлов приложения, и кнопка их не трогает.</p>' +
+    '<button type="button" style="width:100%;padding:14px;border:0;border-radius:12px;background:#2453D6;color:#fff;font:inherit;font-weight:600;cursor:pointer">Скачать приложение заново</button>' +
+    '<p style="opacity:.7;font-size:14px">Нужен интернет. Если не помогло, нажми Ctrl+Shift+R.</p></div>';
+  box.querySelector('button').onclick = function () {
+    this.disabled = true; this.textContent = 'Скачиваю…';
+    var sw = navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve();
+    var cs = window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k.indexOf('podhod-') === 0; }).map(function (k) { return caches.delete(k); })); }) : Promise.resolve();
+    Promise.all([sw, cs]).catch(function () {}).then(function () { location.reload(); });
+  };
+  document.body.appendChild(box);
+}, 8000);
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
