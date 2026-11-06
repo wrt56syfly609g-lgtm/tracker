@@ -119,6 +119,11 @@ function swipe() {
   }, { passive: true });
 }
 
+// Отвечаем сервис-воркеру, что приложение запущено: иначе после обновления он перезагрузит окно.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.onmessage = e => { if (e.data?.type === 'podhod-ping') e.ports[0]?.postMessage('alive'); };
+}
+
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   const had = !!navigator.serviceWorker.controller;

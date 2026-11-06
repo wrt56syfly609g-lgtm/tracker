@@ -49,8 +49,27 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
     .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
+    .then(() => self.clients.claim())
+    .then(reviveStuck));
 });
+
+// Окна, где приложение не запустилось (например, пустой экран после неудачного обновления),
+// перезагружаем сами, уже с новыми файлами. Запущенное приложение отвечает на ping и не трогается:
+// ему покажется «Приложение обновлено». Данные при перезагрузке не теряются.
+async function reviveStuck() {
+  const list = await self.clients.matchAll({ type: 'window' });
+  await Promise.all(list.map(c => new Promise(done => {
+    const ch = new MessageChannel();
+    let alive = false;
+    ch.port1.onmessage = () => { alive = true; };
+    try { c.postMessage({ type: 'podhod-ping' }, [ch.port2]); } catch { /* окно уже закрыто */ }
+    setTimeout(() => {
+      // navigate не ждём: перезагрузка сама ждёт окончания активации, иначе была бы взаимная блокировка.
+      if (!alive) Promise.resolve().then(() => c.navigate(c.url)).catch(() => {});
+      done();
+    }, 1500);
+  })));
+}
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
